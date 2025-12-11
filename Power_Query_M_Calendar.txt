@@ -1,0 +1,18 @@
+let
+    StartDate = #date(1970, 2, 12),
+    EndDate = #date(2019, 8, 12),
+    NumberOfDays = Duration.Days(EndDate - StartDate) + 1,
+    DateList = List.Dates(StartDate, NumberOfDays, #duration(1, 0, 0, 0)),
+    TableFromList = Table.FromList(DateList, Splitter.SplitByNothing(), {"Date"}, null, ExtraValues.Error),
+    ChangedType = Table.TransformColumnTypes(TableFromList,{{"Date", type date}}),
+    
+    // إضافة الأعمدة
+    AddedYear = Table.AddColumn(ChangedType, "Year", each Date.Year([Date]), Int64.Type),
+    AddedMonth = Table.AddColumn(AddedYear, "Month", each Date.Month([Date]), Int64.Type),
+    AddedMonthName = Table.AddColumn(AddedMonth, "Month Name", each Date.MonthName([Date]), type text),
+    AddedDay = Table.AddColumn(AddedMonthName, "Day", each Date.Day([Date]), Int64.Type),
+    AddedDayName = Table.AddColumn(AddedDay, "Day Name", each Date.DayOfWeekName([Date]), type text),
+    AddedQuarter = Table.AddColumn(AddedDayName, "Quarter", each "Q" & Text.From(Date.QuarterOfYear([Date])), type text),
+    #"Filtered Rows" = Table.SelectRows(AddedQuarter, each true)
+in
+    #"Filtered Rows"
