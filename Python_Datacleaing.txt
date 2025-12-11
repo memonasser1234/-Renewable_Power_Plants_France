@@ -1,237 +1,100 @@
 import pandas as pd
 import numpy as np
-from datetime import datetime
 
 # 1. قراءة الملف
-df = pd.read_excel('فرنسا.xlsx')
+input_file = 'renewable_power_planets_FR_filtered.xlsx'
+df = pd.read_excel(input_file)
+print(f"✅ تم تحميل البيانات: {df.shape[0]} صف × {df.shape[1]} عمود")
 
-# 2. عرض معلومات أولية عن البيانات
-print("=" * 50)
-print("معلومات أولية عن البيانات:")
-print("=" * 50)
-print(f"عدد الصفوف: {df.shape[0]}")
-print(f"عدد الأعمدة: {df.shape[1]}")
-print("\nأسماء الأعمدة:")
-for i, col in enumerate(df.columns, 1):
-    print(f"{i}. {col}")
-
-print("\n" + "=" * 50)
-print("قيم مفقودة في كل عمود:")
-print("=" * 50)
-missing_values = df.isnull().sum()
-for col, count in missing_values.items():
-    if count > 0:
-        print(f"{col}: {count} قيم مفقودة ({count/len(df)*100:.1f}%)")
-
-# 3. نسخة احتياطية من البيانات الأصلية
-df_original = df.copy()
-
-# 4. إزالة الأعمدة التي تحتوي على نسبة عالية من القيم المفقودة
-threshold = 0.7  # إذا كان 70% أو أكثر من القيم مفقودة
-columns_to_drop = []
-for col in df.columns:
-    if df[col].isnull().sum() / len(df) >= threshold:
-        columns_to_drop.append(col)
-
-if columns_to_drop:
-    print(f"\nإزالة الأعمدة التالية لاحتواءها على أكثر من {threshold*100}% قيم مفقودة:")
-    for col in columns_to_drop:
-        print(f"  - {col}")
-    df.drop(columns=columns_to_drop, inplace=True)
-
-# 5. تنظيف الأعمدة الفردية
-print("\n" + "=" * 50)
-print("تنظيف الأعمدة الفردية:")
-print("=" * 50)
-
-# العمود: capacity
-print("\n1. عمود 'capacity':")
+# 2. تنظيف الأساسيات
+# تحويل الأنواع الأساسية
 df['capacity'] = pd.to_numeric(df['capacity'], errors='coerce')
-print(f"   - تحويل إلى نوع رقمي")
-print(f"   - القيم المفقودة: {df['capacity'].isnull().sum()}")
+df['lon'] = pd.to_numeric(df['lon'], errors='coerce')
+df['lat'] = pd.to_numeric(df['lat'], errors='coerce')
 
-# الأعمدة النصية: إزالة المسافات الزائدة
+# تحويل التواريخ
+for col in ['commissioning_date', 'connection_date', 'disconnection_date']:
+    if col in df.columns:
+        df[col] = pd.to_datetime(df[col], errors='coerce')
+
+# تنظيف النصوص
 text_columns = ['energy_source_level_1', 'energy_source_level_2', 
-                'energy_source_level_3', 'technology', 'data_source',
-                'nuts_1_region', 'nuts_2_region', 'nuts_3_region',
-                'municipality', 'region', 'municipality_group',
-                'departement', 'site_name']
-
+                'technology', 'region', 'site_name', 'departement']
 for col in text_columns:
     if col in df.columns:
         df[col] = df[col].astype(str).str.strip()
-        print(f"   - عمود '{col}': تم إزالة المسافات الزائدة")
 
-# الأعمدة الرقمية: lon, lat
-numeric_columns = ['lon', 'lat']
-for col in numeric_columns:
-    if col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-        print(f"   - عمود '{col}': تحويل إلى رقمي")
-
-# الأعمدة التاريخية
-date_columns = ['commissioning_date', 'connection_date', 'disconnection_date']
-for col in date_columns:
-    if col in df.columns:
-        # تحويل التواريخ إلى تنسيق صحيح
-        df[col] = pd.to_datetime(df[col], errors='coerce')
-        print(f"   - عمود '{col}': تحويل إلى تاريخ")
-
-# الأعمدة الكودية: تحويل إلى نص
-code_columns = ['municipality_code', 'region_code', 'municipality_group_code',
-                'departement_code', 'IRIS_code', 'EIC_code', 'as_of_year']
-
-for col in code_columns:
-    if col in df.columns:
-        df[col] = df[col].astype(str).str.strip()
-        print(f"   - عمود '{col}': تحويل إلى نص وتم تنظيفه")
-
-# 6. التعامل مع القيم المفقودة
-print("\n" + "=" * 50)
-print("التعامل مع القيم المفقودة:")
-print("=" * 50)
-
+# 3. التعامل مع القيم المفقودة
 # إزالة الصفوف التي تفتقد بيانات أساسية
-essential_columns = ['capacity', 'energy_source_level_1']
-rows_before = len(df)
-df = df.dropna(subset=essential_columns, how='all')
-rows_after = len(df)
-rows_removed = rows_before - rows_after
-print(f"   - تم إزالة {rows_removed} صف لافتقارها بيانات أساسية")
+essential_cols = ['capacity', 'energy_source_level_1']
+df = df.dropna(subset=essential_cols, how='all')
 
-# ملء القيم المفقودة في الأعمدة النصية
-text_cols_to_fill = ['energy_source_level_2', 'energy_source_level_3', 'technology']
-for col in text_cols_to_fill:
+# ملء القيم المفقودة في الأعمدة النصية المهمة
+for col in ['energy_source_level_2', 'technology', 'region']:
     if col in df.columns:
         df[col] = df[col].replace(['nan', 'None', ''], 'غير محدد')
-        missing_count = df[col].isnull().sum()
-        if missing_count > 0:
-            df[col] = df[col].fillna('غير محدد')
-            print(f"   - عمود '{col}': تم ملء {missing_count} قيمة مفقودة بـ 'غير محدد'")
+        df[col] = df[col].fillna('غير محدد')
 
-# ملء القيم المفقودة في الأعمدة الجغرافية
-if 'region' in df.columns:
-    region_missing = df['region'].isnull().sum()
-    if region_missing > 0:
-        df['region'] = df['region'].fillna('غير محدد')
-        print(f"   - عمود 'region': تم ملء {region_missing} قيمة مفقودة")
-
-# 7. إضافة أعمدة مفيدة للتحليل
-print("\n" + "=" * 50)
-print("إضافة أعمدة مفيدة للتحليل:")
-print("=" * 50)
-
-# حساب العمر التقريبي للمحطة
+# 4. إضافة أعمدة مفيدة
+# سنة التأسيس
 if 'commissioning_date' in df.columns:
-    current_year = datetime.now().year
-    df['plant_age_years'] = current_year - df['commissioning_date'].dt.year
-    print("   - تمت إضافة عمود 'plant_age_years' (عمر المحطة بالسنوات)")
+    df['commissioning_year'] = df['commissioning_date'].dt.year
 
-# تصنيف حجم المحطة
-def classify_capacity(cap):
-    if pd.isna(cap):
-        return 'غير معروف'
-    elif cap < 0.1:
-        return 'صغير جداً'
-    elif cap < 1:
-        return 'صغير'
-    elif cap < 10:
-        return 'متوسط'
-    else:
-        return 'كبير'
+# 5. إزالة التكرارات
+df = df.drop_duplicates()
 
-df['capacity_category'] = df['capacity'].apply(classify_capacity)
-print("   - تمت إضافة عمود 'capacity_category' (تصنيف حجم المحطة)")
+# 6. حفظ البيانات المنظفة بنفس اسم الملف
+output_excel = 'renewable_power_planets_FR_filtered_cleaned.xlsx'
+output_csv = 'renewable_power_planets_FR_filtered_cleaned.csv'
 
-# 8. إزالة التكرارات
-print("\n" + "=" * 50)
-print("إزالة التكرارات:")
-print("=" * 50)
+df.to_excel(output_excel, index=False, encoding='utf-8-sig')
+df.to_csv(output_csv, index=False, encoding='utf-8-sig')
 
-duplicates_before = df.duplicated().sum()
-if duplicates_before > 0:
-    df = df.drop_duplicates()
-    print(f"   - تم إزالة {duplicates_before} صف مكرر")
-else:
-    print("   - لا توجد صفوف مكررة")
+print(f"✅ تم تنظيف البيانات وحفظها في:")
+print(f"   - {output_excel}")
+print(f"   - {output_csv}")
 
-# 9. حفظ البيانات النظيفة
-output_file = 'فرنسا_منظفة.xlsx'
-df.to_excel(output_file, index=False, encoding='utf-8-sig')
-
-print("\n" + "=" * 50)
-print("ملخص التنظيف:")
-print("=" * 50)
-print(f"البيانات الأصلية: {df_original.shape[0]} صف × {df_original.shape[1]} عمود")
-print(f"البيانات المنظفة: {df.shape[0]} صف × {df.shape[1]} عمود")
-print(f"تم حفظ البيانات المنظفة في: {output_file}")
-
-# 10. عرض عينة من البيانات المنظفة
-print("\n" + "=" * 50)
-print("عينة من البيانات المنظفة (5 صفوف أولى):")
-print("=" * 50)
-print(df.head())
-
-print("\n" + "=" * 50)
-print("أنواع البيانات النهائية:")
-print("=" * 50)
-print(df.dtypes)
-
-# 11. إحصائيات إضافية
-print("\n" + "=" * 50)
-print("إحصائيات إضافية:")
-print("=" * 50)
-
-if 'capacity' in df.columns:
-    print("\nإحصائيات القدرة (MW):")
-    print(f"   - المتوسط: {df['capacity'].mean():.2f}")
-    print(f"   - الوسيط: {df['capacity'].median():.2f}")
-    print(f"   - الحد الأدنى: {df['capacity'].min():.2f}")
-    print(f"   - الحد الأقصى: {df['capacity'].max():.2f}")
-    print(f"   - المجموع: {df['capacity'].sum():.2f}")
-
-if 'energy_source_level_1' in df.columns:
-    print("\nتوزيع مصادر الطاقة (المستوى الأول):")
-    print(df['energy_source_level_1'].value_counts())
+# 7. عرض ملخص سريع
+print("\n📊 ملخص سريع للبيانات المنظفة:")
+print(f"عدد الصفوف: {df.shape[0]}")
+print(f"عدد الأعمدة: {df.shape[1]}")
+print(f"\nإجمالي القدرة: {df['capacity'].sum():.2f} MW")
+print(f"عدد المحطات الفريدة: {df['site_name'].nunique()}")
 
 if 'energy_source_level_2' in df.columns:
-    print("\nتوزيع مصادر الطاقة (المستوى الثاني):")
+    print("\nتوزيع مصادر الطاقة:")
     print(df['energy_source_level_2'].value_counts())
 
 if 'region' in df.columns:
-    print("\nعدد المحطات حسب المنطقة:")
-    print(df['region'].value_counts().head(10))
+    print("\nعدد المحطات حسب المنطقة (أعلى 5):")
+    print(df['region'].value_counts().head(5))
 
-# 12. كود للتعامل مع مشاكل الترميز (اختياري)
-print("\n" + "=" * 50)
-print("كود إضافي للتعامل مع مشاكل الترميز:")
-print("=" * 50)
+# 8. عرض عينة
+print("\n🔍 عينة من البيانات (3 صفوف أولى):")
+print(df.head(3))
 
-code_snippet = '''
-# إذا كانت هناك مشاكل في الترميز، يمكن استخدام هذا الكود:
-def clean_arabic_text(text):
-    """
-    تنظيف النصوص العربية وإزالة المشاكل الشائعة
-    """
-    if pd.isna(text):
-        return text
+# 9. معلومات إضافية
+print("\n📈 معلومات إضافية:")
+print(f"أقدم تاريخ إنشاء: {df['commissioning_date'].min().year if 'commissioning_date' in df.columns else 'غير متوفر'}")
+print(f"أحدث تاريخ إنشاء: {df['commissioning_date'].max().year if 'commissioning_date' in df.columns else 'غير متوفر'}")
+print(f"متوسط القدرة: {df['capacity'].mean():.2f} MW")
+print(f"أكبر محطة: {df['capacity'].max():.2f} MW")
+
+# 10. حفظ الإحصائيات في ملف نصي
+stats_file = 'renewable_power_planets_FR_filtered_stats.txt'
+with open(stats_file, 'w', encoding='utf-8') as f:
+    f.write("="*50 + "\n")
+    f.write("إحصائيات بيانات محطات الطاقة المتجددة - فرنسا\n")
+    f.write("="*50 + "\n\n")
+    f.write(f"عدد السجلات: {df.shape[0]}\n")
+    f.write(f"عدد الأعمدة: {df.shape[1]}\n")
+    f.write(f"إجمالي القدرة المركبة: {df['capacity'].sum():.2f} MW\n")
+    f.write(f"عدد المحطات الفريدة: {df['site_name'].nunique()}\n")
+    f.write(f"متوسط القدرة لكل محطة: {df['capacity'].mean():.2f} MW\n\n")
     
-    text = str(text)
-    # إزالة المسافات الزائدة
-    text = ' '.join(text.split())
-    # إزالة الأحرف غير المرغوب فيها
-    import re
-    text = re.sub(r'[^\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDCF\uFDF0-\uFDFF\uFE70-\uFEFF\s0-9a-zA-Z]', '', text)
-    return text.strip()
+    if 'energy_source_level_2' in df.columns:
+        f.write("توزيع مصادر الطاقة:\n")
+        for source, count in df['energy_source_level_2'].value_counts().items():
+            f.write(f"  - {source}: {count} محطة\n")
 
-# تطبيق التنظيف على الأعمدة النصية
-for col in df.select_dtypes(include=['object']).columns:
-    df[col] = df[col].apply(clean_arabic_text)
-'''
-
-print(code_snippet)
-
-# 13. حفظ نسخة CSV أيضاً (اختياري)
-csv_file = 'فرنسا_منظفة.csv'
-df.to_csv(csv_file, index=False, encoding='utf-8-sig')
-print(f"\nتم حفظ نسخة CSV في: {csv_file}")
+print(f"\n📄 تم حفظ الإحصائيات في: {stats_file}")
